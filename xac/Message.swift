@@ -9,4 +9,5 @@ struct Message: Identifiable, Equatable {
     let id = UUID()
     let role: MessageRole
     var content: String
+    var senderName: String?
 }

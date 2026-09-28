@@ -14,8 +14,8 @@ import UniformTypeIdentifiers
 struct ControlView: View {
     var prompt: String = ""
     @Binding var config: GenerationConfig
-    @Binding var model: LanguageModel?
-    @Binding var modelURL: URL?
+    @Binding var model: LanguageModel? // Keeps active model loaded in UI memory
+    @Binding var agents: [AgentRole] // New workflow state
 
     @State var discloseParams = true
 
@@ -26,6 +26,7 @@ struct ControlView: View {
 
     @State var disclosedModel = true
     @State private var showFilePicker = false
+    @State private var activeAgentIndexForPicker: Int? = nil
 
 
     var body: some View {
@@ -66,13 +67,12 @@ struct ControlView: View {
                             CFloat(config.maxNewTokens)
                         } set: {
                             config.maxNewTokens = Int($0)
-                        }, in: CFloat(1)...CFloat(model?.maxContextLength ?? 128), step: 1) {
+                        }, in: CFloat(1)...CFloat(2048), step: 1) {
                             Text("Maximum Length")
                             Spacer()
                             Text("\(Int(config.maxNewTokens))")
                         }
                         .compactSliderSecondaryColor(.blue)
-                        .disabled(model == nil)
                         .help("The maximum number of tokens to generate. Requests can use up to 2,048 tokens shared between prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for normal English text)")
                     } label: {
                        HStack {
@@ -120,35 +120,70 @@ struct ControlView: View {
 
                 Group {
                     DisclosureGroup(isExpanded: $disclosedModel) {
-                        Spacer()
-                        Button(action: {
-                            showFilePicker.toggle()
-                        }, label: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach($agents) { $agent in
+                                VStack(alignment: .leading) {
+                                    HStack {
+                                        TextField("Agent Role", text: $agent.name)
+                                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        Button(action: {
+                                            if let index = agents.firstIndex(where: { $0.id == agent.id }) {
+                                                agents.remove(at: index)
+                                            }
+                                        }) {
+                                            Image(systemName: "minus.circle.fill").foregroundColor(.red)
+                                        }
+                                    }
 
-                            Text(model?.description ?? "Select model...")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 7)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .stroke(Color.secondary, lineWidth: 2)
-                                )
-                        })
-                        .buttonStyle(.borderless)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                        .cornerRadius(5)
+                                    TextField("System Prompt...", text: $agent.systemPrompt)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.caption)
+
+                                    Button(action: {
+                                        if let index = agents.firstIndex(where: { $0.id == agent.id }) {
+                                            activeAgentIndexForPicker = index
+                                            showFilePicker.toggle()
+                                        }
+                                    }, label: {
+                                        Text(agent.modelURL?.lastPathComponent ?? "Select Model for \(agent.name)...")
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 7)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 5)
+                                                    .stroke(Color.secondary, lineWidth: 1)
+                                            )
+                                    })
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+
+                            Button(action: {
+                                agents.append(AgentRole(name: "New Agent", systemPrompt: "You are an assistant.", modelURL: nil))
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text("Add Agent to Chain")
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
                         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.mlpackage, .mlmodelc], allowsMultipleSelection: false) { result in
                             switch result {
                             case .success(let urls):
-                                modelURL = urls.first
+                                if let index = activeAgentIndexForPicker {
+                                    agents[index].modelURL = urls.first
+                                }
                             case .failure(let error):
                                 print("Import failed: \(error.localizedDescription)")
                             }
+                            activeAgentIndexForPicker = nil
                         }
-
                     } label: {
                         HStack {
-                            Label("Models", systemImage: "cpu").foregroundColor(.secondary)
+                            Label("Agent Workflow", systemImage: "person.3.sequence").foregroundColor(.secondary)
                             Spacer()
                         }
                     }

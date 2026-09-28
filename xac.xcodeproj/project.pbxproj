@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		NEW_AGENT_FILE_ID_1 /* Agent.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEW_AGENT_FILE_ID_2 /* Agent.swift */; };
 		NEW_FILE_ID_1 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEW_FILE_ID_2 /* Message.swift */; };
 		EB2E91A72A06A45A00FA3ACE /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = EB2E91A62A06A45A00FA3ACE /* Transformers */; };
 		EB545ED82A0AC32A00C8A5BD /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB545ED72A0AC32A00C8A5BD /* StatusView.swift */; };
@@ -41,6 +42,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		NEW_AGENT_FILE_ID_2 /* Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent.swift; sourceTree = "<group>"; };
 		NEW_FILE_ID_2 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		EB545ED72A0AC32A00C8A5BD /* StatusView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		EB90085C2A02C53100B321C4 /* ControlView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ControlView.swift; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 		EBE1152D2A02AECC000A0CF4 /* xac */ = {
 			isa = PBXGroup;
 			children = (
+				NEW_AGENT_FILE_ID_2 /* Agent.swift */,
 				NEW_FILE_ID_2 /* Message.swift */,
 				EBE1152E2A02AECC000A0CF4 /* xacApp.swift */,
 				EB90085C2A02C53100B321C4 /* ControlView.swift */,
@@ -287,6 +290,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				NEW_AGENT_FILE_ID_1 /* Agent.swift in Sources */,
 				NEW_FILE_ID_1 /* Message.swift in Sources */,
 				EB9008692A0578C300B321C4 /* ModelLoader.swift in Sources */,
 				EBE115312A02AECC000A0CF4 /* ContentView.swift in Sources */,

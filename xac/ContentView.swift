@@ -34,32 +34,13 @@ struct ContentView: View {
     @State private var status: ModelState = .noModel
     @State private var outputText: AttributedString = ""
     @State private var messages: [Message] = []
+    @State private var agents: [AgentRole] = [AgentRole(name: "Default Agent", systemPrompt: "You are a helpful assistant.", modelURL: nil)]
 
     @Binding var clearTriggered: Bool
 
     func modelDidChange() {
-        guard status != .loading else { return }
-
-        status = .loading
-        Task.init {
-            do {
-                languageModel = try await ModelLoader.load(url: modelURL)
-                if let config = languageModel?.defaultGenerationConfig {
-                    let maxNewTokens = self.config.maxNewTokens
-                    self.config = config
-                    Task.init {
-                        // Refresh after slider limits have been updated
-                        self.config.maxNewTokens = min(maxNewTokens, languageModel?.maxContextLength ?? 20)
-                    }
-                }
-                status = .ready(nil)
-                isSettingsPresented = false
-            } catch {
-                print("No model could be loaded: \(error)")
-                status = .noModel
-            }
-
-        }
+        // Keeping for backward compatibility with single model flow if needed,
+        // but now primarily driven sequentially during run().
     }
 
     func clear() {
@@ -68,59 +49,99 @@ struct ContentView: View {
     }
 
     func run() {
-        guard let languageModel = languageModel else { return }
+        guard !agents.isEmpty else {
+            status = .failed("No agents configured")
+            return
+        }
         guard !prompt.isEmpty else { return }
 
         let userMessage = prompt
         messages.append(Message(role: .user, content: userMessage))
         prompt = ""
 
-        // Combine history for full prompt context
-        let fullPrompt = messages.map { $0.content }.joined(separator: "\n")
-
-        messages.append(Message(role: .model, content: ""))
-        let modelMessageIndex = messages.count - 1
-
-        @Sendable func showOutput(currentGeneration: String, progress: Double, completedTokensPerSecond: Double? = nil) {
-            Task { @MainActor in
-                // Temporary hack to remove start token returned by llama tokenizers
-                var response = currentGeneration.deletingPrefix("<s> ")
-
-                // Strip prompt
-                if response.count > fullPrompt.count {
-                    response = response[fullPrompt.endIndex...].replacingOccurrences(of: "\\n", with: "\n")
-                }
-
-                messages[modelMessageIndex].content = response
-
-                // Update legacy output text for copy action
-                outputText = AttributedString(response)
-
-                if let tps = completedTokensPerSecond {
-                    status = .ready(tps)
-                } else {
-                    status = .generating(progress)
-                }
-            }
-        }
-
         Task.init {
-            status = .generating(0)
-            var tokensReceived = 0
-            let begin = Date()
-            do {
-                let output = try await languageModel.generate(config: config, prompt: fullPrompt) { inProgressGeneration in
-                    tokensReceived += 1
-                    showOutput(currentGeneration: inProgressGeneration, progress: Double(tokensReceived)/Double(config.maxNewTokens))
+            var fullHistory = messages.map { $0.content }.joined(separator: "\n")
+
+            for agent in agents {
+                guard let url = agent.modelURL else {
+                    await MainActor.run { status = .failed("Missing model for \(agent.name)") }
+                    return
                 }
-                let completionTime = Date().timeIntervalSince(begin)
-                let tokensPerSecond = Double(tokensReceived) / completionTime
-                showOutput(currentGeneration: output, progress: 1, completedTokensPerSecond: tokensPerSecond)
-                print("Took \(completionTime)")
-            } catch {
-                print("Error \(error)")
-                Task { @MainActor in
-                    status = .failed("\(error)")
+
+                await MainActor.run { status = .loading }
+
+                do {
+                    // Load the model for the current agent
+                    print("Loading model for \(agent.name)...")
+                    let activeModel = try await ModelLoader.load(url: url)
+                    await MainActor.run { self.languageModel = activeModel }
+
+                    if let newConfig = activeModel.defaultGenerationConfig {
+                        let maxNewTokens = self.config.maxNewTokens
+                        await MainActor.run {
+                            self.config = newConfig
+                            self.config.maxNewTokens = min(maxNewTokens, activeModel.maxContextLength)
+                        }
+                    }
+
+                    // Add UI bubble for this agent
+                    let currentAgentName = agent.name
+                    let modelMessageIndex = await MainActor.run { () -> Int in
+                        messages.append(Message(role: .model, content: "", senderName: currentAgentName))
+                        return messages.count - 1
+                    }
+
+                    let contextPrompt = agent.systemPrompt + "\n" + fullHistory
+
+                    @Sendable func showOutput(currentGeneration: String, progress: Double, completedTokensPerSecond: Double? = nil) {
+                        Task { @MainActor in
+                            var response = currentGeneration.deletingPrefix("<s> ")
+                            if response.count > contextPrompt.count {
+                                response = String(response.dropFirst(contextPrompt.count)).replacingOccurrences(of: "\\n", with: "\n")
+                            }
+
+                            messages[modelMessageIndex].content = response
+                            outputText = AttributedString(response) // Sync for copy button
+
+                            if let tps = completedTokensPerSecond {
+                                status = .ready(tps)
+                            } else {
+                                status = .generating(progress)
+                            }
+                        }
+                    }
+
+                    await MainActor.run { status = .generating(0) }
+                    var tokensReceived = 0
+                    let begin = Date()
+
+                    let output = try await activeModel.generate(config: config, prompt: contextPrompt) { inProgressGeneration in
+                        tokensReceived += 1
+                        showOutput(currentGeneration: inProgressGeneration, progress: Double(tokensReceived)/Double(config.maxNewTokens))
+                    }
+
+                    let completionTime = Date().timeIntervalSince(begin)
+                    let tokensPerSecond = Double(tokensReceived) / completionTime
+
+                    // Safely format the final output logic to capture directly
+                    var finalResponse = output.deletingPrefix("<s> ")
+                    if finalResponse.count > contextPrompt.count {
+                        finalResponse = String(finalResponse.dropFirst(contextPrompt.count)).replacingOccurrences(of: "\\n", with: "\n")
+                    }
+
+                    showOutput(currentGeneration: output, progress: 1, completedTokensPerSecond: tokensPerSecond)
+
+                    // Append this agent's response to the full history so the next agent can see it securely on background thread
+                    fullHistory += "\n[\(agent.name)]:\n" + finalResponse
+
+                    // Release the model from memory before loading the next one
+                    print("Releasing model for \(agent.name)")
+                    await MainActor.run { self.languageModel = nil }
+
+                } catch {
+                    print("Error \(error)")
+                    await MainActor.run { status = .failed("\(error)") }
+                    return // Stop the chain if an agent fails
                 }
             }
         }
@@ -152,12 +173,19 @@ struct ContentView: View {
                                     Spacer()
                                 }
 
-                                Text(LocalizedStringKey(message.content))
-                                    .padding()
-                                    .background(message.role == .user ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
-                                    .cornerRadius(12)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: geometry.size.width * 0.8, alignment: message.role == .user ? .trailing : .leading)
+                                VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                                    if let senderName = message.senderName {
+                                        Text(senderName)
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
+                                    Text(LocalizedStringKey(message.content))
+                                        .padding()
+                                        .background(message.role == .user ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                                        .cornerRadius(12)
+                                        .textSelection(.enabled)
+                                }
+                                .frame(maxWidth: geometry.size.width * 0.8, alignment: message.role == .user ? .trailing : .leading)
 
                                 if message.role == .model {
                                     Spacer()
@@ -179,9 +207,9 @@ struct ContentView: View {
 
                     Button(action: run) {
                         Image(systemName: "paperplane.fill")
-                            .foregroundColor(prompt.isEmpty || status == .loading ? .gray : .blue)
+                            .foregroundColor(prompt.isEmpty || status == .loading || String(describing: status).starts(with: "generating") ? .gray : .blue)
                     }
-                    .disabled(prompt.isEmpty || status == .loading)
+                    .disabled(prompt.isEmpty || status == .loading || String(describing: status).starts(with: "generating"))
                     .padding(.trailing)
                 }
                 .padding(.bottom)
@@ -211,7 +239,7 @@ struct ContentView: View {
     var regularView: some View {
         NavigationSplitView {
             VStack {
-                ControlView(prompt: prompt, config: $config, model: $languageModel, modelURL: $modelURL)
+                ControlView(prompt: prompt, config: $config, model: $languageModel, agents: $agents)
                 StatusView(status: $status)
             }
             .navigationSplitViewColumnWidth(min: 250, ideal: 300)
@@ -245,7 +273,7 @@ struct ContentView: View {
         .sheet(isPresented: $isSettingsPresented) {
             NavigationView {
                 VStack {
-                    ControlView(prompt: prompt, config: $config, model: $languageModel, modelURL: $modelURL)
+                    ControlView(prompt: prompt, config: $config, model: $languageModel, agents: $agents)
                     StatusView(status: $status)
                 }
                 .navigationTitle("Settings")
@@ -273,12 +301,6 @@ struct ContentView: View {
 #else
             regularView
 #endif
-        }
-        .onAppear {
-            modelDidChange()
-        }
-        .onChange(of: modelURL) {
-            modelDidChange()
         }
     }
 }
