@@ -173,8 +173,16 @@ struct ControlView: View {
                         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.mlpackage, .mlmodelc], allowsMultipleSelection: false) { result in
                             switch result {
                             case .success(let urls):
-                                if let index = activeAgentIndexForPicker {
-                                    agents[index].modelURL = urls.first
+                                if let index = activeAgentIndexForPicker, let url = urls.first {
+                                    let secure = url.startAccessingSecurityScopedResource()
+                                    do {
+                                        let bookmarkData = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+                                        agents[index].modelURL = url
+                                        agents[index].modelBookmarkData = bookmarkData
+                                    } catch {
+                                        print("Failed to create bookmark: \(error)")
+                                    }
+                                    if secure { url.stopAccessingSecurityScopedResource() }
                                 }
                             case .failure(let error):
                                 print("Import failed: \(error.localizedDescription)")

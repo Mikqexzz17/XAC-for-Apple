@@ -153,7 +153,10 @@ struct ContentView: View {
         case .noModel:
             EmptyView()
         case .loading:
-            ProgressView().controlSize(.small).padding(.trailing, 6)
+            Text("> Compiling thought...")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.green)
+                .padding(.trailing, 6)
         case .ready, .failed:
             Button(action: run) { Label("Run", systemImage: "play.fill") }
                 .keyboardShortcut("R")
@@ -180,8 +183,9 @@ struct ContentView: View {
                                             .foregroundColor(.gray)
                                     }
                                     Text(LocalizedStringKey(message.content))
+                                        .font(.system(.body, design: .monospaced))
                                         .padding()
-                                        .background(message.role == .user ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                                        .background(message.role == .user ? Color.blue.opacity(0.2) : Color(red: 0.1, green: 0.1, blue: 0.15))
                                         .cornerRadius(12)
                                         .textSelection(.enabled)
                                 }
@@ -202,6 +206,7 @@ struct ContentView: View {
                 // Bottom Input Bar
                 HStack {
                     TextField("Message...", text: $prompt)
+                        .font(.system(.body, design: .monospaced))
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
 
@@ -291,17 +296,58 @@ struct ContentView: View {
 #endif
 
     var body: some View {
-        Group {
+        TabView {
+            Group {
 #if os(iOS)
-            if horizontalSizeClass == .compact && (verticalSizeClass == .compact || verticalSizeClass == .regular) {
-                compactView
-            } else {
-                regularView
-            }
+                if horizontalSizeClass == .compact && (verticalSizeClass == .compact || verticalSizeClass == .regular) {
+                    compactView
+                } else {
+                    regularView
+                }
 #else
-            regularView
+                regularView
 #endif
+            }
+            .tabItem {
+                Label("Chat", systemImage: "message.fill")
+            }
+
+            DownloadView()
+                .tabItem {
+                    Label("Hub", systemImage: "arrow.down.circle.fill")
+                }
         }
+        .onAppear {
+            if let savedAgents = Store.shared.load() {
+                agents = savedAgents
+
+                // Resolve bookmarks to URLs for persistent access
+                for i in 0..<agents.count {
+                    if let data = agents[i].modelBookmarkData {
+                        var isStale = false
+                        if let resolvedURL = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &isStale) {
+                            agents[i].modelURL = resolvedURL
+                            if isStale {
+                                // Refresh bookmark if stale
+                                let secure = resolvedURL.startAccessingSecurityScopedResource()
+                                agents[i].modelBookmarkData = try? resolvedURL.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+                                if secure { resolvedURL.stopAccessingSecurityScopedResource() }
+                            }
+                        }
+                    }
+                }
+            }
+            if let savedMessages = Store.shared.loadMessages() {
+                messages = savedMessages
+            }
+        }
+        .onChange(of: agents) { newAgents in
+            Store.shared.save(agents: newAgents)
+        }
+        .onChange(of: messages) { newMessages in
+            Store.shared.saveMessages(messages: newMessages)
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
