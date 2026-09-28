@@ -33,6 +33,7 @@ struct ContentView: View {
 
     @State private var status: ModelState = .noModel
     @State private var outputText: AttributedString = ""
+    @State private var messages: [Message] = []
 
     @Binding var clearTriggered: Bool
 
@@ -63,10 +64,22 @@ struct ContentView: View {
 
     func clear() {
         outputText = ""
+        messages = []
     }
 
     func run() {
         guard let languageModel = languageModel else { return }
+        guard !prompt.isEmpty else { return }
+
+        let userMessage = prompt
+        messages.append(Message(role: .user, content: userMessage))
+        prompt = ""
+
+        // Combine history for full prompt context
+        let fullPrompt = messages.map { $0.content }.joined(separator: "\n")
+
+        messages.append(Message(role: .model, content: ""))
+        let modelMessageIndex = messages.count - 1
 
         @Sendable func showOutput(currentGeneration: String, progress: Double, completedTokensPerSecond: Double? = nil) {
             Task { @MainActor in
@@ -74,17 +87,15 @@ struct ContentView: View {
                 var response = currentGeneration.deletingPrefix("<s> ")
 
                 // Strip prompt
-                guard response.count > prompt.count else { return }
-                response = response[prompt.endIndex...].replacingOccurrences(of: "\\n", with: "\n")
+                if response.count > fullPrompt.count {
+                    response = response[fullPrompt.endIndex...].replacingOccurrences(of: "\\n", with: "\n")
+                }
 
-                // Format prompt + response with different colors
-                var styledPrompt = AttributedString(prompt)
-                styledPrompt.foregroundColor = .black
+                messages[modelMessageIndex].content = response
 
-                var styledOutput = AttributedString(response)
-                styledOutput.foregroundColor = .accentColor
+                // Update legacy output text for copy action
+                outputText = AttributedString(response)
 
-                outputText = styledPrompt + styledOutput
                 if let tps = completedTokensPerSecond {
                     status = .ready(tps)
                 } else {
@@ -98,7 +109,7 @@ struct ContentView: View {
             var tokensReceived = 0
             let begin = Date()
             do {
-                let output = try await languageModel.generate(config: config, prompt: prompt) { inProgressGeneration in
+                let output = try await languageModel.generate(config: config, prompt: fullPrompt) { inProgressGeneration in
                     tokensReceived += 1
                     showOutput(currentGeneration: inProgressGeneration, progress: Double(tokensReceived)/Double(config.maxNewTokens))
                 }
@@ -133,47 +144,48 @@ struct ContentView: View {
     var chatView: some View {
         GeometryReader { geometry in
             VStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Your input (use format appropriate for the model you are using)")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(messages) { message in
+                            HStack {
+                                if message.role == .user {
+                                    Spacer()
+                                }
 
-                    TextEditor(text: $prompt)
-                        .font(.body)
-                        .fontDesign(.rounded)
-                        .scrollContentBackground(.hidden)
-                        .multilineTextAlignment(.leading)
-                        .padding(.all, 4)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.5), lineWidth: 1)
-                        )
-                }
-                .frame(height: 100)
-                .padding(.bottom, 16)
+                                Text(LocalizedStringKey(message.content))
+                                    .padding()
+                                    .background(message.role == .user ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                                    .cornerRadius(12)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: geometry.size.width * 0.8, alignment: message.role == .user ? .trailing : .leading)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Language Model Output")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-
-                    Text(outputText)
-                        .font(.system(size: 14))
-                        .foregroundColor(.blue)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(nil)
-                        .frame(minWidth: geometry.size.width - 44, minHeight: 200, alignment: Alignment(horizontal: .leading, vertical: .top))
-                        .padding(.all, 4)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.5), lineWidth: 1)
-                        )
-                        .onChange(of: clearTriggered) { _, _ in
-                            clear()
+                                if message.role == .model {
+                                    Spacer()
+                                }
+                            }
                         }
+                    }
+                    .padding(.horizontal)
                 }
+                .onChange(of: clearTriggered) { _, _ in
+                    clear()
+                }
+
+                // Bottom Input Bar
+                HStack {
+                    TextField("Message...", text: $prompt)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal)
+
+                    Button(action: run) {
+                        Image(systemName: "paperplane.fill")
+                            .foregroundColor(prompt.isEmpty || status == .loading ? .gray : .blue)
+                    }
+                    .disabled(prompt.isEmpty || status == .loading)
+                    .padding(.trailing)
+                }
+                .padding(.bottom)
             }
-            .padding()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     HStack {
