@@ -89,34 +89,34 @@ struct ControlView: View {
 
                 Divider()
 
-//                Group {
-//                    DisclosureGroup(isExpanded: $discloseAdvanced) {
-//                        Spacer()
-//                        CompactSlider(value: $config.topP) {
-//                            Text("Top P")
-//                            Spacer()
-//                            Text("\(config.topP, specifier: "%.2f")")
-//                        }
-//                        .help("Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered.")
-//                        CompactSlider(value: Binding {
-//                            Darwin.sqrt(CGFloat(config.repetitionPenalty))
-//                        } set: {
-//                            config.repetitionPenalty = Darwin.pow($0, 2)
-//                        }, in: 1...sqrt(CGFloat(10))) {
-//                            Text("Frequency Penalty")
-//                            Spacer()
-//                            Text("\(config.repetitionPenalty, specifier: "%.1f")")
-//                        }.help("How much to penalize new tokens based on their existing frequency in the text so far. Decreases the model's likelihood to repeat the same line verbatim.")
-//                     } label: {
-//                        HStack {
-//                            Label("Advanced", systemImage: "wrench.adjustable").foregroundColor(.secondary)
-//                            Spacer()
-//                        }
-//                    }
-//                     .compactSliderSecondaryColor(.blue)
-//                }
-//
-//                Divider()
+                Group {
+                    DisclosureGroup(isExpanded: $discloseAdvanced) {
+                        Spacer()
+                        CompactSlider(value: $config.topP) {
+                            Text("Top P")
+                            Spacer()
+                            Text("\(config.topP, specifier: "%.2f")")
+                        }
+                        .help("Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered.")
+                        CompactSlider(value: Binding {
+                            Darwin.sqrt(CGFloat(config.repetitionPenalty))
+                        } set: {
+                            config.repetitionPenalty = Float(Darwin.pow($0, 2))
+                        }, in: 1...sqrt(CGFloat(10))) {
+                            Text("Frequency Penalty")
+                            Spacer()
+                            Text("\(config.repetitionPenalty, specifier: "%.1f")")
+                        }.help("How much to penalize new tokens based on their existing frequency in the text so far. Decreases the model's likelihood to repeat the same line verbatim.")
+                     } label: {
+                        HStack {
+                            Label("Advanced", systemImage: "wrench.adjustable").foregroundColor(.secondary)
+                            Spacer()
+                        }
+                    }
+                     .compactSliderSecondaryColor(.blue)
+                }
+
+                Divider()
 
                 Group {
                     DisclosureGroup(isExpanded: $disclosedModel) {

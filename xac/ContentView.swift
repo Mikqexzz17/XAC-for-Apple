@@ -176,7 +176,20 @@ struct ContentView: View {
             .padding()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    runButton
+                    HStack {
+                        runButton
+                        Button(action: {
+                            #if os(iOS)
+                            UIPasteboard.general.string = String(outputText.characters)
+                            #elseif os(macOS)
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(String(outputText.characters), forType: .string)
+                            #endif
+                        }) {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        .disabled(outputText.characters.isEmpty)
+                    }
                 }
             }
         }
