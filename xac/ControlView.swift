@@ -121,6 +121,40 @@ struct ControlView: View {
                 Group {
                     DisclosureGroup(isExpanded: $disclosedModel) {
                         VStack(alignment: .leading, spacing: 12) {
+                            Menu {
+                                Button("Ultra Pipeline (10 Agents)") {
+                                    let firstURL = agents.first?.modelURL
+                                    let firstBookmark = agents.first?.modelBookmarkData
+
+                                    let ultraRoles = [
+                                        ("Analyst", "You are an expert analyst. Understand the user's problem deeply, clarify the requirements, and propose a high-level solution architecture."),
+                                        ("Architect", "You are a software architect. Take the Analyst's solution and design the concrete class structures, design patterns, and module boundaries."),
+                                        ("Lead Developer", "You are the Lead Developer. Take the Architect's design and write the initial implementation of the code."),
+                                        ("Syntax Auditor", "You are a compiler expert. Review the Lead Developer's code for any syntax errors, deprecations, or compilation issues and fix them."),
+                                        ("Security Expert", "You are a cybersecurity expert. Review the code for vulnerabilities, injection flaws, or unsafe data handling. Rewrite it securely."),
+                                        ("Performance Optimizer", "You are an optimization expert. Analyze the code's time and space complexity. Rewrite it to be as fast and efficient as possible."),
+                                        ("QA Tester", "You are a QA engineer. Think of edge cases and write unit tests for the current code implementation."),
+                                        ("Refactor Specialist", "You are a clean code advocate. Refactor the code to improve readability, variable naming, and DRY principles without changing functionality."),
+                                        ("Technical Writer", "You are a documentation expert. Add comprehensive comments and docstrings to the code explaining how it works."),
+                                        ("Final Reviewer", "You are the project manager. Review all previous steps. Provide the final, polished code block and a brief summary of the changes made.")
+                                    ]
+
+                                    agents = ultraRoles.map {
+                                        AgentRole(name: $0.0, systemPrompt: $0.1, modelURL: firstURL, modelBookmarkData: firstBookmark)
+                                    }
+                                }
+
+                                Button("Clear All") {
+                                    agents = []
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "wand.and.stars")
+                                    Text("Load Template")
+                                }
+                                .padding(.vertical, 4)
+                            }
+
                             ForEach($agents) { $agent in
                                 VStack(alignment: .leading) {
                                     HStack {

@@ -35,6 +35,7 @@ struct ContentView: View {
     @State private var outputText: AttributedString = ""
     @State private var messages: [Message] = []
     @State private var agents: [AgentRole] = [AgentRole(name: "Default Agent", systemPrompt: "You are a helpful assistant.", modelURL: nil)]
+    @State private var currentAgentName: String = ""
 
     @Binding var clearTriggered: Bool
 
@@ -63,6 +64,7 @@ struct ContentView: View {
             var fullHistory = messages.map { $0.content }.joined(separator: "\n")
 
             for agent in agents {
+                await MainActor.run { self.currentAgentName = agent.name }
                 guard let url = agent.modelURL else {
                     await MainActor.run { status = .failed("Missing model for \(agent.name)") }
                     return
@@ -153,7 +155,7 @@ struct ContentView: View {
         case .noModel:
             EmptyView()
         case .loading:
-            Text("> Compiling thought...")
+            Text("> [\(currentAgentName)] Thinking...")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundColor(.green)
                 .padding(.trailing, 6)
