@@ -24,11 +24,20 @@ struct DownloadView: View {
                     Text(model.0)
                         .font(.headline)
 
-                    if downloader.isDownloading {
+                    if downloader.isDownloading && downloader.activeDownloadURL?.absoluteString == model.1 {
                         ProgressView(value: downloader.progress)
                             .progressViewStyle(.linear)
-                        Text("\(Int(downloader.progress * 100))%")
+                        HStack {
+                            Text("\(Int(downloader.progress * 100))%  (\(downloader.downloadSizeString))")
+                                .font(.caption)
+                            Spacer()
+                            Button("Cancel") {
+                                downloader.cancel()
+                            }
                             .font(.caption)
+                            .foregroundColor(.red)
+                            .buttonStyle(.borderless)
+                        }
                     } else {
                         Button(action: {
                             if let url = URL(string: model.1) {
@@ -37,11 +46,12 @@ struct DownloadView: View {
                         }) {
                             HStack {
                                 Image(systemName: "arrow.down.circle.fill")
-                                Text("Download")
+                                Text(downloader.isDownloading ? "Wait..." : "Download")
                             }
-                            .foregroundColor(.blue)
+                            .foregroundColor(downloader.isDownloading ? .gray : .blue)
                         }
                         .buttonStyle(.borderless)
+                        .disabled(downloader.isDownloading)
                     }
                 }
                 .padding(.vertical, 4)

@@ -3,6 +3,8 @@ import Foundation
 class Downloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var isDownloading = false
     @Published var progress: Double = 0.0
+    @Published var activeDownloadURL: URL? = nil
+    @Published var downloadSizeString: String = ""
 
     private var downloadTask: URLSessionDownloadTask?
     private lazy var session: URLSession = {
@@ -16,6 +18,8 @@ class Downloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
         DispatchQueue.main.async {
             self.isDownloading = true
             self.progress = 0.0
+            self.downloadSizeString = ""
+            self.activeDownloadURL = url
         }
 
         // Use a simple temporary download for .mlpackage zips or .mlmodelc folders
@@ -23,6 +27,16 @@ class Downloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
         // but for iOS CoreML models they are often distributed as a single zipped archive.
         downloadTask = session.downloadTask(with: url)
         downloadTask?.resume()
+    }
+
+    func cancel() {
+        downloadTask?.cancel()
+        DispatchQueue.main.async {
+            self.isDownloading = false
+            self.progress = 0.0
+            self.activeDownloadURL = nil
+            self.downloadSizeString = ""
+        }
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
@@ -53,8 +67,16 @@ class Downloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         let calculatedProgress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        let writtenStr = formatter.string(fromByteCount: totalBytesWritten)
+        let totalStr = formatter.string(fromByteCount: totalBytesExpectedToWrite)
+
         DispatchQueue.main.async {
             self.progress = calculatedProgress
+            self.downloadSizeString = "\(writtenStr) / \(totalStr)"
         }
     }
 }

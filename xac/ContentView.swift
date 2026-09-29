@@ -190,6 +190,23 @@ struct ContentView: View {
                                         .textSelection(.enabled)
                                 }
                                 .frame(maxWidth: geometry.size.width * 0.8, alignment: message.role == .user ? .trailing : .leading)
+                                .contextMenu {
+                                    Button(action: {
+                                        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                                            prompt = messages[index].content
+                                        }
+                                    }) {
+                                        Label("Edit / Retry", systemImage: "pencil")
+                                    }
+
+                                    Button(role: .destructive, action: {
+                                        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                                            messages.remove(at: index)
+                                        }
+                                    }) {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
 
                                 if message.role == .model {
                                     Spacer()
@@ -202,6 +219,32 @@ struct ContentView: View {
                 .onChange(of: clearTriggered) { _, _ in
                     clear()
                 }
+
+                // Quick Prompts / Snippets
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        let snippets = ["Explain this code", "Optimize this algorithm", "Find security bugs", "Write a unit test"]
+                        ForEach(snippets, id: \.self) { snippet in
+                            Button(action: {
+                                if prompt.isEmpty {
+                                    prompt = snippet + ":\n"
+                                } else {
+                                    prompt += "\n" + snippet + ":\n"
+                                }
+                            }) {
+                                Text(snippet)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .cornerRadius(16)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 4)
 
                 // Bottom Input Bar
                 HStack {
@@ -223,6 +266,17 @@ struct ContentView: View {
                 ToolbarItem(placement: .primaryAction) {
                     HStack {
                         runButton
+
+                        let exportText = messages.map { msg in
+                            let role = msg.role == .user ? "User" : (msg.senderName ?? "AI")
+                            return "[\(role)]\n\(msg.content)"
+                        }.joined(separator: "\n\n")
+
+                        ShareLink(item: exportText) {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(messages.isEmpty)
+
                         Button(action: {
                             #if os(iOS)
                             UIPasteboard.general.string = String(outputText.characters)
